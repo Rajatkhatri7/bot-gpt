@@ -1,0 +1,49 @@
+version: '3.8'
+
+services:
+  postgres:
+    image: postgres:14-alpine
+    container_name: botgpt-postgres
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: botgpt
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  app:
+    build: .
+    container_name: botgpt-app
+    ports:
+      - "8000:8000"
+    env_file:
+      - .env
+    environment:
+      DATABASE_URL: postgresql+asyncpg://postgres:postgres@postgres:5432/botgpt
+      ALEMBIC_DATABASE_URL: postgresql://postgres:postgres@postgres:5432/botgpt
+      JWT_SECRET_KEY: ${SECRET_KEY:-your-secret-key-change-in-production}
+      JWT_ALGORITHM: HS256
+      JWT_EXPIRATION_MINUTES: 1440
+      LLM_PROVIDER: ${LLM_PROVIDER:-groq}
+      LLM_TEMPERATURE: 0.7
+      LLM_MAX_TOKENS: 1024
+      GROQ_API_KEY: ${GROQ_API_KEY}
+      OPENAI_API_KEY: ${OPENAI_API_KEY}
+      GEMINI_API_KEY: ${GEMINI_API_KEY}
+    volumes:
+      - ./uploads:/app/uploads
+      - ./cache:/app/cache
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: unless-stopped
+
+volumes:
+  postgres_data:
