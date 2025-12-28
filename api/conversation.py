@@ -25,6 +25,8 @@ from utils.auth_helper import verify_user
 from services.rag.rag_service import RAGService
 from api.schemas.conversation import ConversationMode
 from db.models.document import Document
+from utils.classify_intent import classify_intent
+from utils.memory_helper import create_older_context
 
 
 
@@ -195,7 +197,7 @@ async def stream_message(
         .where(Message.conversation_id == conversation_id)
     )
     user_seq = seq_result.scalar()
-    
+
     user_msg = Message(
         conversation_id=conversation_id,
         role="user",
@@ -204,11 +206,18 @@ async def stream_message(
     )
     db.add(user_msg)
     await db.commit()
+
+    
+    
     
     llm = get_llm_client()
-    
+    intent = await classify_intent(llm, payload["message"])
+    older_context = await create_older_context(db,conv)
+
+        
     # Build messages based on conversation mode
-    if conv.conversation_mode == ConversationMode.DOCUMENT_QA:
+    context = None
+    if intent in ["DOCUMENT_QA", "DOCUMENT_SUMMARY"]:
         docs_result = await db.execute(
             select(Document.id)
             .where(
@@ -218,37 +227,34 @@ async def stream_message(
         )
         doc_ids = [row[0] for row in docs_result.all()]
         
-        if not doc_ids:
-            raise HTTPException(
-                status_code=400, 
-                detail="No processed documents available for this conversation"
-            )
+        if  doc_ids:
+            relevant_chunks = await RAGService.retrieve(
+                    query=payload["message"],
+                    document_ids=doc_ids,  
+                    top_k=3
+                )
         
-        # chunks from vector DB
-        relevant_chunks = await RAGService.retrieve(
-            query=payload["message"],
-            document_ids=doc_ids,  
-            top_k=3
-        )
+            context = "\n\n".join(relevant_chunks)
+        else:
+            intent = "OPEN_CHAT"
         
-        context = "\n\n".join(relevant_chunks)
         
-        messages = [
-            {
+
+    if context:
+        system_context = {
                 "role": "system",
-                "content": "You are a helpful assistant. Answer questions based ONLY on the provided context. If the answer is not in the context, say you don't know."
-            },
-            {
-                "role": "user",
-                "content": f"Context:\n{context}\n\nQuestion: {payload['message']}"
+                "content": f"You are a helpful assistant. Answer questions based ONLY on the provided context. If the answer is not in the context, say you don't know. Following is the context :\n{context}"
             }
-        ]
     else:
-        messages = [
-            {"role": "system", "content": "You are a helpful assistant"},
-            {"role": "user", "content": payload["message"]},
-        ]
-    
+        system_context = {"role": "system", "content": "You are a helpful assistant"}
+
+    messages = [
+        system_context,
+        *older_context,
+        {"role": "user", "content": payload["message"]}
+    ]
+
+   
     async def event_generator():
         full_response = ""
         metadata = {
