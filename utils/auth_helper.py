@@ -46,6 +46,31 @@ async def verify_user(token: str = Depends(oauth_scheme), db: AsyncSession = Dep
         payload = await get_decoded_token(token)
         if payload is None:
             raise credentials_exception
+        elif payload.get("type") != "access":
+            raise credentials_exception
+    except JWTError:
+        raise credentials_exception
+    
+    email: str = payload.get("sub")
+    user = await db.execute(select(User.email, User.password, User.id).filter(User.email == email))
+    user = user.first()
+    if user is None:
+        raise credentials_exception
+    return user
+
+
+async def verify_refresh_token(token: str,db: AsyncSession):
+    credentials_exception = HTTPException(
+        detail="Invalid refresh token",
+        status_code=status.HTTP_401_UNAUTHORIZED
+    )
+    try:
+        payload = await get_decoded_token(token)
+        if payload is None:
+            raise credentials_exception
+        if payload.get("type") != "refresh":
+            raise credentials_exception
+        
     except JWTError:
         raise credentials_exception
     
