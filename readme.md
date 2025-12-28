@@ -10,6 +10,7 @@ A FastAPI-based conversational AI platform that supports both open chat and docu
 - 🔐 **User Authentication**: JWT-based secure authentication
 - 🗄️ **Vector Search**: ChromaDB for semantic document search
 - 📊 **Conversation Management**: Track conversation history and metadata
+- 🧠 **Auto Intent Classification**: LLM automatically classifies user intent on each message
 - ⚡ **Async Architecture**: Built with async/await for high performance
 - 🐳 **Docker Support**: Easy deployment with Docker
 
@@ -60,7 +61,9 @@ A FastAPI-based conversational AI platform that supports both open chat and docu
 │       ├── embeddings.py     # Text embedding functions
 │       └── rag_service.py    # Document chunking & retrieval
 ├── utils/
-│   └── auth_helper.py         # JWT helper functions
+│   ├── auth_helper.py         # JWT helper functions
+│   ├── classify_intent.py     # Intent classification utilities
+│   └── memory_helper.py       # Memory management utilities
 ├── uploads/                   # Local document storage
 ├── cache/                     # ChromaDB data directory
 ├── main.py                    # Application entry point
@@ -182,7 +185,30 @@ Response:
 ```json
 {
   "access_token": "eyJhbGc...",
-  "token_type": "bearer"
+  "token_type": "bearer",
+  "refresh_token": "eyJhbGc...",
+  "expires_in": 15,
+  "refresh_token_expires_in": 60
+}
+```
+
+### Refresh token
+
+```bash
+curl -X POST "http://localhost:8000/user/token/refresh" \
+  -H "Authorization: Bearer <your-token>" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "refresh_token": "eyJhbGci...."
+  }'
+```
+
+Response:
+```json
+{
+  "access_token": "eyJhbGc...",
+  "token_type": "bearer",
+  "expires_in": 15
 }
 ```
 
@@ -322,15 +348,6 @@ LLM_TEMPERATURE=0.7      # 0.0 to 1.0 (creativity)
 LLM_MAX_TOKENS=1024      # Maximum response length
 ```
 
-### ChromaDB Configuration
-
-ChromaDB data is stored in `./cache/` directory. To reset:
-
-```bash
-rm -rf cache/
-```
-
-It will be recreated on next startup.
 
 ## Testing with Postman
 

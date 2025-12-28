@@ -3,11 +3,12 @@ from fastapi import APIRouter,Depends,HTTPException,Request,status
 from sqlalchemy.ext.asyncio import AsyncSession
 from db.models.user import User
 from db.session import get_db
-from api.schemas.user import LoginRequest,SignupRequest
+from api.schemas.user import LoginRequest,SignupRequest,RefreshTokenRequest
 from core.config import settings
 from passlib.hash import pbkdf2_sha256
-from utils.auth_helper import create_token
+from utils.auth_helper import create_token,verify_refresh_token,verify_user
 from sqlalchemy import select
+
 
 
 router = APIRouter()
@@ -45,3 +46,15 @@ async def login(request_data: LoginRequest,request:Request, db: AsyncSession = D
     refresh_token = await create_token(data={"sub": user.email},type="refresh",expires_minutes=settings.REFRESH_TOKEN_EXPIRE_MINUTES)
 
     return {"message": "Login successful", "access_token": access_token, "token_type": "bearer","expires_in": settings.ACCESS_TOKEN_EXPIRE_MINUTES,"refresh_token": refresh_token,"refresh_token_expires_in": settings.REFRESH_TOKEN_EXPIRE_MINUTES}
+
+
+
+@router.post("/token/refresh")
+async def refresh_token(request:RefreshTokenRequest,user:User = Depends(verify_user),  db: AsyncSession = Depends(get_db)):
+    token = request.refresh_token.strip()
+    user = await verify_refresh_token(token,db)
+     
+    access_token = await create_token(data={"sub": user.email},type="access",expires_minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES)
+
+    return {"access_token": access_token, "token_type": "bearer","expires_in": settings.ACCESS_TOKEN_EXPIRE_MINUTES}
+     
