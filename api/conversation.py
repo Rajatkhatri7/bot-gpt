@@ -51,22 +51,6 @@ async def create_conversation(
     return conversation
 
 
-@router.post("", response_model=ConversationResponse)
-async def create_conversation(
-    payload: CreateConversationRequest,
-    user: User = Depends(verify_user),
-    db: AsyncSession = Depends(get_db),
-):
-    conversation = Conversation(
-        user_id=user.id,  # Use authenticated user's ID
-        conversation_mode=payload.conversation_mode,
-        title=payload.title
-    )
-    db.add(conversation)
-    await db.commit()
-    await db.refresh(conversation)
-    return conversation
-
 
 @router.get("")
 async def list_conversations(
